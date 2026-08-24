@@ -1,0 +1,5 @@
+{
+  "location_ids": [1948, 2138, 8679],
+  "measurement_lookback_days": 7,
+  "flags_lookback_days": 30
+}
