@@ -1,0 +1,20 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Unmodified landing zone. One JSONB document per OpenAQ pull file.
+    schema: raw
+    tables:
+      - name: openaq_pulls
+        description: >
+          Nested location → sensors → measurements → flags JSON as ingested from
+          data/raw/. Flattening happens in staging models, not at load time.
+        columns:
+          - name: id
+            description: Surrogate key for the loaded file.
+          - name: location_id
+            description: OpenAQ location ID from the pull.
+          - name: pulled_at
+            description: UTC timestamp when the ingestion script wrote the file.
+          - name: raw_json
+            description: Full unmodified pull payload (JSONB).
