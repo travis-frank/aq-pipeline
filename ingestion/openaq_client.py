@@ -174,7 +174,7 @@ def pull_location(
 
     try:
         location_response = client.locations.get(location_id)
-    except OpenAQError as exc:
+    except (OpenAQError, APIError) as exc:
         message = f"Location {location_id}: failed to fetch location ({exc})"
         logger.error(message)
         stats.error = str(exc)
