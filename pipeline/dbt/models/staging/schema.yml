@@ -1,0 +1,65 @@
+version: 2
+
+models:
+  - name: stg_air_quality
+    description: >
+      One row per OpenAQ measurement, flattened from raw.openaq_pulls JSONB.
+      Flags are joined by overlapping time windows; unflagged rows are retained.
+    columns:
+      - name: pull_id
+        description: Surrogate key of the source raw.openaq_pulls row.
+      - name: location_id
+        description: OpenAQ location ID.
+        tests:
+          - not_null
+      - name: location_name
+        description: Human-readable station name from the location object.
+      - name: sensor_id
+        description: OpenAQ sensor ID (one pollutant per sensor).
+        tests:
+          - not_null
+      - name: sensor_name
+        description: Sensor display name from OpenAQ.
+      - name: parameter
+        description: Pollutant / parameter name (e.g. pm25, o3, no2).
+        tests:
+          - not_null
+      - name: units
+        description: Units reported for this measurement (ppm, µg/m³, etc.).
+        tests:
+          - not_null
+      - name: units_mixed_in_source
+        description: >
+          True if the same parameter appeared with more than one distinct unit
+          inside the source pull. Spot-check; expected false for OpenAQ SI units.
+      - name: value
+        description: >
+          Numeric reading. Nullable — null values are retained, not dropped.
+      - name: period_start
+        description: Start of the measurement interval (UTC).
+      - name: measured_at
+        description: >
+          End of the measurement interval (UTC). OpenAQ timestamps mark period end.
+        tests:
+          - not_null
+      - name: latitude
+        description: Measurement lat, falling back to location coordinates.
+      - name: longitude
+        description: Measurement lon, falling back to location coordinates.
+      - name: is_flagged
+        description: True when an OpenAQ QA flag window overlaps this measurement.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
+      - name: flag_reason
+        description: Concatenated OpenAQ flag labels (and notes) when flagged.
+      - name: coverage_expected_count
+        description: OpenAQ coverage.expected_count for this measurement period.
+      - name: coverage_observed_count
+        description: OpenAQ coverage.observed_count for this measurement period.
+      - name: coverage_pct
+        description: OpenAQ coverage.percent_coverage for this measurement period.
+      - name: pulled_at
+        description: When the ingestion script wrote the source file.
