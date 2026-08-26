@@ -1,0 +1,72 @@
+version: 2
+
+models:
+  - name: mart_station_daily
+    description: >
+      Daily air-quality aggregates per station and pollutant. min/max/avg are
+      computed from unflagged readings only; flagged_count tracks OpenAQ QA
+      hits without folding them into those stats.
+    columns:
+      - name: location_id
+        description: OpenAQ location (station) ID.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_air_quality')
+                field: location_id
+      - name: location_name
+        description: Station display name.
+        tests:
+          - not_null
+      - name: measurement_date
+        description: UTC calendar date of the measurement period end.
+        tests:
+          - not_null
+      - name: parameter
+        description: Pollutant / parameter name.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - "co"
+                  - "no"
+                  - "no2"
+                  - "nox"
+                  - "o3"
+                  - "pm10"
+                  - "pm25"
+                  - "so2"
+      - name: units
+        description: Units for this pollutant (ppm, µg/m³, etc.).
+        tests:
+          - not_null
+      - name: record_count
+        description: Total staging rows for this station/day/pollutant (flagged + unflagged).
+        tests:
+          - not_null
+      - name: flagged_count
+        description: How many of those readings were flagged by OpenAQ QA.
+        tests:
+          - not_null
+      - name: unflagged_count
+        description: Readings included in min/max/avg (not flagged).
+        tests:
+          - not_null
+      - name: min_value
+        description: Minimum unflagged value (null if every reading that day was flagged).
+      - name: max_value
+        description: Maximum unflagged value (null if every reading that day was flagged).
+      - name: avg_value
+        description: Average unflagged value (null if every reading that day was flagged).
+      - name: coverage_pct
+        description: >
+          100 × sum(coverage_observed_count) / sum(coverage_expected_count)
+          from OpenAQ coverage fields for the day.
+      - name: latitude
+        description: Station latitude (from staging fallback).
+      - name: longitude
+        description: Station longitude (from staging fallback).
+      - name: last_pulled_at
+        description: Latest ingestion pulled_at contributing to this grain.
