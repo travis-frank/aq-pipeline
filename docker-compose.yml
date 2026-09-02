@@ -1,13 +1,19 @@
 # Local Airflow + warehouse Postgres.
 #
-# Airflow metadata lives in a separate database
-# named `airflow` on this same Postgres container. The warehouse database
-# (`aq_pipeline`) holds raw/staging/marts and pipeline_runs.
+# Airflow metadata lives in database `airflow` on this Postgres container.
+# Warehouse data (raw/staging/marts/pipeline_runs) lives in `aq_pipeline`.
 #
-# First `docker compose up` after this change pulls the Airflow image
+# Airflow uses a custom image (pipeline/airflow/Dockerfile) with openaq + dbt.
+# Repo paths are mounted at /opt/aq-pipeline for DAG task execution.
+#
+# DB_HOST is overridden to `postgres` for Airflow only — host scripts keep
+# DB_HOST=localhost from .env via Makefile `include .env`.
 
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.9.3
+  build:
+    context: .
+    dockerfile: pipeline/airflow/Dockerfile
+  image: aq-pipeline-airflow:2.9.3
   env_file:
     - .env
   environment: &airflow-common-env
@@ -18,7 +24,12 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    AIRFLOW_REPO_ROOT: /opt/aq-pipeline
+    DB_HOST: postgres
   volumes:
+    - ./ingestion:/opt/aq-pipeline/ingestion
+    - ./pipeline:/opt/aq-pipeline/pipeline
+    - ./data/raw:/opt/aq-pipeline/data/raw
     - ./pipeline/dags:/opt/airflow/dags
     - ./pipeline/airflow/logs:/opt/airflow/logs
   user: "${AIRFLOW_UID:-50000}:0"
