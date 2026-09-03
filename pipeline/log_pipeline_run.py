@@ -56,7 +56,7 @@ def parse_dbt_run_results(path: Path) -> int | None:
     return total if found else None
 
 
-def parse_dbt_test_results(path: Path) -> tuple[int | None, int | None]:
+def parse_dbt_test_results(path: Path) -> tuple[int | None, int | None]: 
     """Read dbt test counts from run_results.json after dbt test."""
     if not path.is_file():
         return None, None
