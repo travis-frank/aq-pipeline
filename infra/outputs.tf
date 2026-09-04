@@ -59,6 +59,35 @@ output "rds_security_group_id" {
 }
 
 output "airflow_ecs_task_role_arn" {
-  description = "IAM role ARN for the Airflow ECS task."
+  description = "IAM role ARN for the Airflow ECS task (S3/RDS app permissions)."
   value       = aws_iam_role.airflow_ecs_task.arn
+}
+
+output "ecs_task_execution_role_arn" {
+  description = "IAM role ARN for ECS task execution (ECR pull + CloudWatch logs)."
+  value       = aws_iam_role.ecs_task_execution.arn
+}
+
+output "ecs_cluster_name" {
+  description = "ECS cluster name."
+  value       = aws_ecs_cluster.main.name
+}
+
+output "ecs_cluster_arn" {
+  description = "ECS cluster ARN."
+  value       = aws_ecs_cluster.main.arn
+}
+
+output "airflow_task_definition_arns" {
+  description = "Airflow Fargate task definition ARNs (init, webserver, scheduler)."
+  value = {
+    init      = aws_ecs_task_definition.airflow_init.arn
+    webserver = aws_ecs_task_definition.airflow_webserver.arn
+    scheduler = aws_ecs_task_definition.airflow_scheduler.arn
+  }
+}
+
+output "ecs_run_task_network_configuration" {
+  description = "Network config for aws ecs run-task (private subnets + ECS SG)."
+  value       = local.ecs_network
 }

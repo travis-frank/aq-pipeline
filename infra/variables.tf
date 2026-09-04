@@ -83,3 +83,21 @@ variable "db_instance_class" {
   type        = string
   default     = "db.t3.micro"
 }
+
+variable "airflow_image" {
+  description = "Container image for Airflow tasks (ECR URI after Phase 5; apache/airflow for plan)."
+  type        = string
+  default     = "apache/airflow:2.9.3"
+}
+
+variable "airflow_cpu" {
+  description = "Fargate CPU units for Airflow tasks."
+  type        = string
+  default     = "1024"
+}
+
+variable "airflow_memory" {
+  description = "Fargate memory (MiB) for Airflow tasks."
+  type        = string
+  default     = "2048"
+}
