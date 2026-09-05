@@ -91,3 +91,13 @@ output "ecs_run_task_network_configuration" {
   description = "Network config for aws ecs run-task (private subnets + ECS SG)."
   value       = local.ecs_network
 }
+
+output "billing_sns_topic_arn" {
+  description = "SNS topic for the $5 billing alarm (us-east-1). Subscribe manually if billing_alert_email is unset."
+  value       = aws_sns_topic.billing.arn
+}
+
+output "ops_sns_topic_arn" {
+  description = "SNS topic for RDS CPU/storage alarms."
+  value       = aws_sns_topic.ops.arn
+}
