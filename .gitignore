@@ -26,7 +26,6 @@ infra/.terraform/
 infra/*.tfstate
 infra/*.tfstate.*
 infra/*.tfvars
-infra/.terraform.lock.hcl
 
 # Airflow
 pipeline/airflow/logs/
