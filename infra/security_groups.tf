@@ -24,7 +24,7 @@ resource "aws_security_group" "ecs_tasks" {
 
 resource "aws_security_group" "rds" {
   name        = "${local.name}-rds"
-  description = "RDS Postgres — ingress only from ECS tasks"
+  description = "RDS Postgres - ingress only from ECS tasks"
   vpc_id      = aws_vpc.main.id
 
   ingress {

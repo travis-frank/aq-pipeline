@@ -1,11 +1,14 @@
-"""Load OpenAQ raw JSON files into Postgres as unmodified JSONB.
+"""Load OpenAQ raw JSON into Postgres as unmodified JSONB.
 
 ELT decision: this loader does not flatten nested location / sensor /
-measurement / flag structure. Each file from data/raw/ becomes one row with
-the original JSON in a JSONB column. The raw layer is an unmodified landing
-zone. All flattening and typing in the dbt staging model. That way
-staging and marts can be rebuilt from scratch with `dbt run` without
-re-pulling from the API.
+measurement / flag structure. Each pull becomes one row with the original
+JSON in a JSONB column. The raw layer is an unmodified landing zone; all
+flattening belongs in dbt staging.
+
+Storage backend is selected via environment variables (see
+ingestion/raw_storage.py): set S3_BUCKET for S3, or leave unset and use
+RAW_DATA_DIR / data/raw for local files. DB_* vars select local Postgres
+or RDS.
 """
 
 from __future__ import annotations
@@ -23,8 +26,13 @@ import psycopg2
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_RAW_DIR = PROJECT_ROOT / "data" / "raw"
+INGESTION_DIR = PROJECT_ROOT / "ingestion"
 ENV_FILE = PROJECT_ROOT / ".env"
+
+if str(INGESTION_DIR) not in sys.path:
+    sys.path.insert(0, str(INGESTION_DIR))
+
+from raw_storage import DEFAULT_RAW_DIR, iter_raw_payloads  # noqa: E402
 
 CREATE_SQL = """
 CREATE SCHEMA IF NOT EXISTS raw;
@@ -59,7 +67,7 @@ def load_dotenv(path: Path = ENV_FILE) -> None:
 
 
 def db_connect():
-    """Connect using the same DB_* variables as docker-compose."""
+    """Connect using DB_* variables (local Postgres or RDS)."""
     required = ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD")
     missing = [name for name in required if not os.environ.get(name)]
     if missing:
@@ -74,42 +82,33 @@ def db_connect():
     )
 
 
-def iter_raw_files(raw_dir: Path) -> list[Path]:
-    """Return JSON pull files under data/raw/{location_id}/{timestamp}.json."""
-    if not raw_dir.is_dir():
-        return []
-    return sorted(path for path in raw_dir.glob("*/*.json") if path.is_file())
-
-
-def parse_pull(path: Path) -> tuple[int, datetime, dict[str, Any]]:
-    """Read a pull file and return location_id, pulled_at, and the raw object."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
+def parse_pull_payload(
+    payload: dict[str, Any], source: str
+) -> tuple[int, datetime, dict[str, Any]]:
+    """Validate a pull payload and return location_id, pulled_at, payload."""
     if not isinstance(payload, dict):
-        raise ValueError(f"{path}: expected a JSON object at the root")
+        raise ValueError(f"{source}: expected a JSON object at the root")
 
     location_id = payload.get("location_id")
     pulled_at = payload.get("pulled_at")
     if location_id is None or not pulled_at:
-        raise ValueError(f"{path}: missing location_id or pulled_at")
+        raise ValueError(f"{source}: missing location_id or pulled_at")
 
     return int(location_id), datetime.fromisoformat(pulled_at), payload
 
 
 def load_raw(raw_dir: Path = DEFAULT_RAW_DIR) -> int:
-    """Create the raw table if needed and upsert every pull file. Returns row count written."""
-    files = iter_raw_files(raw_dir)
-    if not files:
-        logger.warning("No JSON files found under %s", raw_dir)
-        return 0
-
+    """Upsert every raw pull into Postgres. Returns number of files loaded."""
     conn = db_connect()
     loaded = 0
     try:
         with conn:
             with conn.cursor() as cur:
                 cur.execute(CREATE_SQL)
-                for path in files:
-                    location_id, pulled_at, payload = parse_pull(path)
+                for source, payload in iter_raw_payloads(raw_dir=raw_dir):
+                    location_id, pulled_at, payload = parse_pull_payload(
+                        payload, source
+                    )
                     cur.execute(
                         UPSERT_SQL,
                         (location_id, pulled_at, json.dumps(payload)),
@@ -119,11 +118,13 @@ def load_raw(raw_dir: Path = DEFAULT_RAW_DIR) -> int:
                         "Loaded location %s pulled_at %s from %s",
                         location_id,
                         pulled_at.isoformat(),
-                        path,
+                        source,
                     )
     finally:
         conn.close()
 
+    if loaded == 0:
+        logger.warning("No raw pull objects found to load")
     return loaded
 
 

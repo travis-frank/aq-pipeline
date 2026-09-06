@@ -48,12 +48,10 @@ DBT_TEST_CMD = f"cd {DBT_DIR} && dbt test"
 
 
 def _run_ingestion() -> dict:
-    from openaq_client import DEFAULT_CONFIG_PATH, DEFAULT_OUTPUT_DIR, run_ingestion
+    from openaq_client import DEFAULT_CONFIG_PATH, run_ingestion
 
-    summary = run_ingestion(
-        config_path=DEFAULT_CONFIG_PATH,
-        output_dir=DEFAULT_OUTPUT_DIR,
-    )
+    # Storage target comes from env (S3_BUCKET vs RAW_DATA_DIR) — no code swap.
+    summary = run_ingestion(config_path=DEFAULT_CONFIG_PATH)
     logger.info(
         "Ingestion complete: %s/%s locations pulled",
         summary.locations_pulled,
@@ -66,10 +64,11 @@ def _run_ingestion() -> dict:
 
 
 def _load_raw_to_postgres() -> dict:
-    from load_raw import DEFAULT_RAW_DIR, load_dotenv, load_raw
+    from load_raw import load_dotenv, load_raw
 
     load_dotenv()
-    loaded = load_raw(raw_dir=DEFAULT_RAW_DIR)
+    # RAW_DATA_DIR / S3_BUCKET select backend — same env contract as ingestion.
+    loaded = load_raw()
     logger.info("Loaded %s raw file(s) into raw.openaq_pulls", loaded)
     return {"rows_loaded": loaded}
 

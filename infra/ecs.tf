@@ -45,6 +45,7 @@ locals {
   # Airflow metastore on the same RDS instance as the warehouse for this
   # ephemeral demo. Locally we use a separate `airflow` database; a dedicated
   # RDS database can be added in Phase 5 if needed.
+  # Password is only stored in SSM (see ssm.tf) — never in the task env block.
   airflow_sqlalchemy_conn = format(
     "postgresql+psycopg2://%s:%s@%s:5432/%s",
     var.db_username,
@@ -53,10 +54,9 @@ locals {
     var.db_name,
   )
 
+  # Non-secret config only. Secrets are injected via the secrets block below.
   airflow_environment = [
     { name = "AIRFLOW__CORE__EXECUTOR", value = "LocalExecutor" },
-    { name = "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN", value = local.airflow_sqlalchemy_conn },
-    { name = "AIRFLOW__CORE__FERNET_KEY", value = random_password.airflow_fernet.result },
     { name = "AIRFLOW__CORE__LOAD_EXAMPLES", value = "false" },
     { name = "AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION", value = "true" },
     { name = "AIRFLOW__WEBSERVER__EXPOSE_CONFIG", value = "false" },
@@ -65,7 +65,30 @@ locals {
     { name = "DB_PORT", value = "5432" },
     { name = "DB_NAME", value = var.db_name },
     { name = "DB_USER", value = var.db_username },
-    { name = "DB_PASSWORD", value = random_password.db.result },
+    { name = "S3_BUCKET", value = aws_s3_bucket.raw.id },
+    { name = "S3_PREFIX", value = "raw" },
+    { name = "AIRFLOW_REPO_ROOT", value = "/opt/aq-pipeline" },
+  ]
+
+  # ECS pulls these from SSM SecureString at container start (not plaintext in
+  # the task definition). valueFrom is the parameter ARN.
+  airflow_secrets = [
+    {
+      name      = "DB_PASSWORD"
+      valueFrom = aws_ssm_parameter.db_password.arn
+    },
+    {
+      name      = "OPENAQ_API_KEY"
+      valueFrom = aws_ssm_parameter.openaq_api_key.arn
+    },
+    {
+      name      = "AIRFLOW__CORE__FERNET_KEY"
+      valueFrom = aws_ssm_parameter.airflow_fernet_key.arn
+    },
+    {
+      name      = "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN"
+      valueFrom = aws_ssm_parameter.airflow_sqlalchemy_conn.arn
+    },
   ]
 
   airflow_log_config = {
@@ -81,6 +104,7 @@ locals {
     image            = var.airflow_image
     essential        = true
     environment      = local.airflow_environment
+    secrets          = local.airflow_secrets
     logConfiguration = local.airflow_log_config
   }
 }

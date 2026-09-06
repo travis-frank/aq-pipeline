@@ -101,3 +101,9 @@ variable "airflow_memory" {
   type        = string
   default     = "2048"
 }
+
+variable "openaq_api_key" {
+  description = "OpenAQ API key stored in SSM SecureString. Required at apply; never commit a real key."
+  type        = string
+  sensitive   = true
+}
