@@ -29,12 +29,26 @@ resource "aws_ecs_cluster" "main" {
     value = "disabled"
   }
 
+  # Needed for aws ecs execute-command into on-demand Fargate tasks.
+  configuration {
+    execute_command_configuration {
+      logging = "DEFAULT"
+    }
+  }
+
   tags = {
     Name = "${local.name}-ecs"
   }
 }
 
 locals {
+  # Default image is this project's ECR repo. Override with var.airflow_image
+  # only for one-off debugging (e.g. plain apache/airflow while iterating).
+  airflow_image = coalesce(
+    var.airflow_image,
+    "${aws_ecr_repository.airflow.repository_url}:2.9.3",
+  )
+
   # Network placement for run-task (private subnets + ECS SG from 4.2).
   ecs_network = {
     subnets          = [for s in aws_subnet.private : s.id]
@@ -101,11 +115,15 @@ locals {
   }
 
   airflow_container_base = {
-    image            = var.airflow_image
+    image            = local.airflow_image
     essential        = true
     environment      = local.airflow_environment
     secrets          = local.airflow_secrets
     logConfiguration = local.airflow_log_config
+    # Recommended for ECS Exec (clean process reaping in the exec session).
+    linuxParameters = {
+      initProcessEnabled = true
+    }
   }
 }
 
@@ -135,6 +153,26 @@ resource "aws_ecs_task_definition" "airflow_init" {
             --role Admin \
             --email admin@example.com \
             || true
+          # Warehouse table used by log_pipeline_run (not created by airflow db migrate).
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import psycopg2
+
+          sql = Path("/opt/aq-pipeline/pipeline/migrations/001_pipeline_runs.sql").read_text()
+          conn = psycopg2.connect(
+              host=os.environ["DB_HOST"],
+              port=os.environ["DB_PORT"],
+              dbname=os.environ["DB_NAME"],
+              user=os.environ["DB_USER"],
+              password=os.environ["DB_PASSWORD"],
+          )
+          conn.autocommit = True
+          with conn.cursor() as cur:
+              cur.execute(sql)
+          conn.close()
+          print("Applied pipeline_runs migration.")
+          PY
         EOT
       ]
     })
