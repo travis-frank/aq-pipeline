@@ -50,7 +50,9 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "1.5.7"
+          # >= 1.9 required: variable validation may reference other variables
+          # (public_subnet_cidrs / availability_zones checks in variables.tf).
+          terraform_version: "1.9.8"
           terraform_wrapper: false
 
       - name: terraform fmt -check
@@ -63,5 +65,5 @@ jobs:
         run: terraform validate
 
       - name: terraform plan
+        # Intentionally no terraform apply; apply/destroy stays manual per demo.
         run: terraform plan -input=false -no-color
-        # Intentionally no terraform apply: apply/destroy stays manual 
