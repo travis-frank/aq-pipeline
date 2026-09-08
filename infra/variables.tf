@@ -85,9 +85,9 @@ variable "db_instance_class" {
 }
 
 variable "airflow_image" {
-  description = "Container image for Airflow tasks (ECR URI after Phase 5; apache/airflow for plan)."
+  description = "Container image for Airflow Fargate tasks. Null = this project's ECR repo tagged 2.9.3 (see aws_ecr_repository.airflow)."
   type        = string
-  default     = "apache/airflow:2.9.3"
+  default     = null
 }
 
 variable "airflow_cpu" {

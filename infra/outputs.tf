@@ -101,3 +101,13 @@ output "ops_sns_topic_arn" {
   description = "SNS topic for RDS CPU/storage alarms."
   value       = aws_sns_topic.ops.arn
 }
+
+output "ecr_airflow_repository_url" {
+  description = "ECR repository URL for the custom Airflow image (no tag)."
+  value       = aws_ecr_repository.airflow.repository_url
+}
+
+output "airflow_image" {
+  description = "Image URI used by Airflow ECS task definitions."
+  value       = local.airflow_image
+}
