@@ -29,12 +29,26 @@ resource "aws_ecs_cluster" "main" {
     value = "disabled"
   }
 
+  # Needed for aws ecs execute-command into on-demand Fargate tasks.
+  configuration {
+    execute_command_configuration {
+      logging = "DEFAULT"
+    }
+  }
+
   tags = {
     Name = "${local.name}-ecs"
   }
 }
 
 locals {
+  # Default image is this project's ECR repo. Override with var.airflow_image
+  # only for one-off debugging (e.g. plain apache/airflow while iterating).
+  airflow_image = coalesce(
+    var.airflow_image,
+    "${aws_ecr_repository.airflow.repository_url}:2.9.3",
+  )
+
   # Network placement for run-task (private subnets + ECS SG from 4.2).
   ecs_network = {
     subnets          = [for s in aws_subnet.private : s.id]
@@ -45,6 +59,7 @@ locals {
   # Airflow metastore on the same RDS instance as the warehouse for this
   # ephemeral demo. Locally we use a separate `airflow` database; a dedicated
   # RDS database can be added in Phase 5 if needed.
+  # Password is only stored in SSM (see ssm.tf) — never in the task env block.
   airflow_sqlalchemy_conn = format(
     "postgresql+psycopg2://%s:%s@%s:5432/%s",
     var.db_username,
@@ -53,10 +68,9 @@ locals {
     var.db_name,
   )
 
+  # Non-secret config only. Secrets are injected via the secrets block below.
   airflow_environment = [
     { name = "AIRFLOW__CORE__EXECUTOR", value = "LocalExecutor" },
-    { name = "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN", value = local.airflow_sqlalchemy_conn },
-    { name = "AIRFLOW__CORE__FERNET_KEY", value = random_password.airflow_fernet.result },
     { name = "AIRFLOW__CORE__LOAD_EXAMPLES", value = "false" },
     { name = "AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION", value = "true" },
     { name = "AIRFLOW__WEBSERVER__EXPOSE_CONFIG", value = "false" },
@@ -65,7 +79,30 @@ locals {
     { name = "DB_PORT", value = "5432" },
     { name = "DB_NAME", value = var.db_name },
     { name = "DB_USER", value = var.db_username },
-    { name = "DB_PASSWORD", value = random_password.db.result },
+    { name = "S3_BUCKET", value = aws_s3_bucket.raw.id },
+    { name = "S3_PREFIX", value = "raw" },
+    { name = "AIRFLOW_REPO_ROOT", value = "/opt/aq-pipeline" },
+  ]
+
+  # ECS pulls these from SSM SecureString at container start (not plaintext in
+  # the task definition). valueFrom is the parameter ARN.
+  airflow_secrets = [
+    {
+      name      = "DB_PASSWORD"
+      valueFrom = aws_ssm_parameter.db_password.arn
+    },
+    {
+      name      = "OPENAQ_API_KEY"
+      valueFrom = aws_ssm_parameter.openaq_api_key.arn
+    },
+    {
+      name      = "AIRFLOW__CORE__FERNET_KEY"
+      valueFrom = aws_ssm_parameter.airflow_fernet_key.arn
+    },
+    {
+      name      = "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN"
+      valueFrom = aws_ssm_parameter.airflow_sqlalchemy_conn.arn
+    },
   ]
 
   airflow_log_config = {
@@ -78,10 +115,15 @@ locals {
   }
 
   airflow_container_base = {
-    image            = var.airflow_image
+    image            = local.airflow_image
     essential        = true
     environment      = local.airflow_environment
+    secrets          = local.airflow_secrets
     logConfiguration = local.airflow_log_config
+    # Recommended for ECS Exec (clean process reaping in the exec session).
+    linuxParameters = {
+      initProcessEnabled = true
+    }
   }
 }
 
@@ -111,6 +153,26 @@ resource "aws_ecs_task_definition" "airflow_init" {
             --role Admin \
             --email admin@example.com \
             || true
+          # Warehouse table used by log_pipeline_run (not created by airflow db migrate).
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import psycopg2
+
+          sql = Path("/opt/aq-pipeline/pipeline/migrations/001_pipeline_runs.sql").read_text()
+          conn = psycopg2.connect(
+              host=os.environ["DB_HOST"],
+              port=os.environ["DB_PORT"],
+              dbname=os.environ["DB_NAME"],
+              user=os.environ["DB_USER"],
+              password=os.environ["DB_PASSWORD"],
+          )
+          conn.autocommit = True
+          with conn.cursor() as cur:
+              cur.execute(sql)
+          conn.close()
+          print("Applied pipeline_runs migration.")
+          PY
         EOT
       ]
     })

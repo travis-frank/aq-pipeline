@@ -57,6 +57,19 @@ data "aws_iam_policy_document" "airflow_ecs_task" {
     ]
     resources = [aws_db_instance.main.arn]
   }
+
+  # ECS Exec (Session Manager channel) — required for execute-command into the scheduler to trigger/poll the DAG. Scoped to ssmmessages only.
+  statement {
+    sid    = "EcsExecSsmmessages"
+    effect = "Allow"
+    actions = [
+      "ssmmessages:CreateControlChannel",
+      "ssmmessages:CreateDataChannel",
+      "ssmmessages:OpenControlChannel",
+      "ssmmessages:OpenDataChannel",
+    ]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role_policy" "airflow_ecs_task" {

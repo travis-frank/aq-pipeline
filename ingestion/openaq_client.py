@@ -1,4 +1,8 @@
-"""Pull recent OpenAQ measurements and flags into raw JSON files on disk."""
+"""Pull recent OpenAQ measurements and flags into raw JSON (local or S3).
+
+Backend is selected via env: set S3_BUCKET for S3, otherwise write under
+RAW_DATA_DIR / data/raw. OPENAQ_API_KEY is always required.
+"""
 
 from __future__ import annotations
 
@@ -165,11 +169,11 @@ def fetch_sensor_flags(
 def pull_location(
     client: OpenAQ,
     location_id: int,
-    output_dir: Path,
+    output_dir: Path | None,
     measurement_lookback_days: int,
     flags_lookback_days: int,
 ) -> LocationPullStats:
-    """Pull one location and write a raw JSON file."""
+    """Pull one location and write a raw JSON object (local or S3)."""
     stats = LocationPullStats(location_id=location_id)
 
     try:
@@ -251,10 +255,6 @@ def pull_location(
         stats.sensors.append(sensor_stats)
 
     pulled_at = datetime.now(timezone.utc).replace(microsecond=0)
-    timestamp = pulled_at.strftime("%Y%m%dT%H%M%SZ")
-    location_dir = output_dir / str(location_id)
-    location_dir.mkdir(parents=True, exist_ok=True)
-    output_path = location_dir / f"{timestamp}.json"
 
     payload = {
         "pulled_at": pulled_at.isoformat(),
@@ -263,18 +263,20 @@ def pull_location(
         "sensors": sensor_payloads,
     }
 
-    with output_path.open("w", encoding="utf-8") as output_file:
-        json.dump(payload, output_file, indent=2)
-        output_file.write("\n")
+    from raw_storage import write_raw_pull
 
-    stats.output_file = str(output_path)
-    logger.info("Wrote raw pull for location %s to %s", location_id, output_path)
+    stats.output_file = write_raw_pull(
+        location_id,
+        pulled_at,
+        payload,
+        output_dir=output_dir,
+    )
     return stats
 
 
 def run_ingestion(
     config_path: Path = DEFAULT_CONFIG_PATH,
-    output_dir: Path = DEFAULT_OUTPUT_DIR,
+    output_dir: Path | None = None,
 ) -> PullSummary:
     """Run ingestion for all configured locations."""
     api_key = os.environ.get("OPENAQ_API_KEY")

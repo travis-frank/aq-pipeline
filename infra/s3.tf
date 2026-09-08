@@ -14,6 +14,9 @@ locals {
 resource "aws_s3_bucket" "raw" {
   bucket = local.raw_bucket_name
 
+  # allow terraform destroy even when ingest left objects.
+  force_destroy = true
+
   tags = {
     Name = "${local.name}-raw"
     Tier = "raw"
