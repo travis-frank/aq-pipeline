@@ -26,6 +26,7 @@ infra/.terraform/
 infra/*.tfstate
 infra/*.tfstate.*
 infra/*.tfvars
+*.pkg
 
 # Airflow
 pipeline/airflow/logs/
