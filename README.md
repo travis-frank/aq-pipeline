@@ -17,12 +17,12 @@ flowchart TB
             NAT[NAT Gateway]
         end
         subgraph Private["Private subnets"]
-            ECS[ECS Fargate<br/>Airflow init / scheduler / webserver]
-            RDS[(RDS Postgres<br/>db.t3.micro)]
+            ECS["ECS Fargate: Airflow init / scheduler / webserver"]
+            RDS[RDS Postgres db.t3.micro]
         end
-        S3EP[[S3 Gateway Endpoint]]
+        S3EP[S3 Gateway Endpoint]
     end
-    S3[(S3 raw bucket)]
+    S3[S3 raw bucket]
     OpenAQ[OpenAQ API]
 
     IGW --- NAT
